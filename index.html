@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocabulary Quiz</title>
+
+    <!-- PWA Manifest Link -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Theme color for browser UI -->
+    <meta name="theme-color" content="#4f46e5">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- External vocabulary file is loaded here -->
+    <script src="vocabulary.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .correct { color: #22c55e; }
+        .incorrect { color: #ef4444; }
+        .info { color: #3b82f6; }
+        .audio-icon {
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-md mx-auto bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 md:p-8">
+        <h1 class="text-2xl md:text-3xl font-bold text-center mb-6 text-gray-800 dark:text-white">Vocabulary Quiz</h1>
+
+        <!-- Section Selection View -->
+        <div id="section-selection-view">
+            <h2 class="text-xl font-semibold text-center mb-4">Choose a Section</h2>
+            <div id="section-buttons-container" class="grid grid-cols-1 gap-3">
+                <!-- Section buttons will be dynamically inserted here -->
+            </div>
+        </div>
+
+        <!-- Quiz View -->
+        <div id="quiz-view" class="hidden">
+            <div id="word-prompt-container" class="text-center">
+                <p class="text-lg text-gray-600 dark:text-gray-400 mb-2" id="prompt-language"></p>
+                <div class="flex items-center justify-center">
+                    <h2 class="text-3xl md:text-4xl font-semibold" id="word-prompt"></h2>
+                    <svg id="audio-player-icon" class="audio-icon hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                    </svg>
+                </div>
+                <audio id="audio-player"></audio>
+            </div>
+
+            <form id="answer-form" class="mt-6">
+                <div class="relative">
+                    <input type="text" id="answer-input" class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Type your answer...">
+                </div>
+                <div id="action-buttons-container" class="mt-4 flex flex-col sm:flex-row gap-2">
+                    <button type="submit" class="w-full sm:w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg">Submit</button>
+                    <button type="button" id="show-answer-btn" class="w-full sm:w-1/2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg">I'm Stuck</button>
+                </div>
+                 <div id="next-button-container" class="mt-4 hidden">
+                    <button type="button" id="next-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg">Next Word</button>
+                </div>
+            </form>
+            
+            <div id="feedback" class="text-center font-medium h-6 mt-4"></div>
+            
+            <div class="text-center mt-4 grid grid-cols-3 gap-2 text-gray-600 dark:text-gray-400">
+                <div>Correct: <span id="correct-count" class="font-bold">0</span></div>
+                <div>Incorrect: <span id="incorrect-count" class="font-bold">0</span></div>
+                <div>Progress: <span id="progress-count" class="font-bold">0/0</span></div>
+            </div>
+
+            <div class="mt-4 text-center">
+                 <button id="back-to-sections-btn" class="text-sm text-indigo-500 hover:underline">Back to Sections</button>
+            </div>
+        </div>
+        
+        <!-- End of Quiz View -->
+        <div id="end-of-quiz-view" class="hidden text-center">
+            <h2 class="text-2xl font-bold mb-4">Section Complete!</h2>
+            <p class="text-lg">Final Score:</p>
+            <p class="mt-2"><span class="font-bold correct" id="final-correct">0</span> Correct</p>
+            <p><span class="font-bold incorrect" id="final-incorrect">0</span> Incorrect</p>
+            <button id="restart-btn" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg">Choose Another Section</button>
+        </div>
+        
+    </div>
+
+    <script>
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Note: The 'vocabularySections' constant is now loaded from vocabulary.js
+            
+            let currentQuizList = [];
+            let currentWordIndex = 0;
+            let currentWord = null;
+            let isGaelicPrompt = false;
+            let correctCount = 0;
+            let incorrectCount = 0;
+            const audioStore = {}; 
+
+            // DOM Elements
+            const sectionSelectionView = document.getElementById('section-selection-view');
+            const sectionButtonsContainer = document.getElementById('section-buttons-container');
+            const quizView = document.getElementById('quiz-view');
+            const endOfQuizView = document.getElementById('end-of-quiz-view');
+            const wordPromptEl = document.getElementById('word-prompt');
+            const promptLanguageEl = document.getElementById('prompt-language');
+            const answerInputEl = document.getElementById('answer-input');
+            const answerForm = document.getElementById('answer-form');
+            const feedbackEl = document.getElementById('feedback');
+            const correctCountEl = document.getElementById('correct-count');
+            const incorrectCountEl = document.getElementById('incorrect-count');
+            const progressCountEl = document.getElementById('progress-count');
+            const showAnswerBtn = document.getElementById('show-answer-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const actionButtonsContainer = document.getElementById('action-buttons-container');
+            const nextButtonContainer = document.getElementById('next-button-container');
+            const backToSectionsBtn = document.getElementById('back-to-sections-btn');
+            const restartBtn = document.getElementById('restart-btn');
+            const finalCorrectEl = document.getElementById('final-correct');
+            const finalIncorrectEl = document.getElementById('final-incorrect');
+            
+            // --- App Initialization ---
+            function init() {
+                sectionButtonsContainer.innerHTML = '';
+                Object.keys(vocabularySections).forEach(sectionName => {
+                    const button = document.createElement('button');
+                    button.textContent = sectionName;
+                    button.className = 'w-full bg-indigo-100 dark:bg-indigo-800 hover:bg-indigo-200 dark:hover:bg-indigo-700 text-indigo-700 dark:text-indigo-200 font-semibold py-3 px-4 rounded-lg transition duration-150';
+                    button.onclick = () => startQuiz(sectionName);
+                    sectionButtonsContainer.appendChild(button);
+                });
+                showView('sections');
+            }
+
+            function showView(viewName) {
+                sectionSelectionView.classList.add('hidden');
+                quizView.classList.add('hidden');
+                endOfQuizView.classList.add('hidden');
+
+                if (viewName === 'sections') sectionSelectionView.classList.remove('hidden');
+                if (viewName === 'quiz') quizView.classList.remove('hidden');
+                if (viewName === 'end') endOfQuizView.classList.remove('hidden');
+            }
+
+            // --- Quiz Setup ---
+            function startQuiz(sectionName) {
+                currentQuizList = [...vocabularySections[sectionName]];
+                shuffleArray(currentQuizList);
+                currentWordIndex = 0;
+                correctCount = 0;
+                incorrectCount = 0;
+                updateStats();
+                showView('quiz');
+                getNextWord();
+            }
+
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            // --- Quiz Logic ---
+            function getNextWord() {
+                if (currentWordIndex >= currentQuizList.length) {
+                    showEndOfQuiz();
+                    return;
+                }
+
+                currentWord = currentQuizList[currentWordIndex];
+                isGaelicPrompt = Math.random() < 0.5;
+
+                const promptData = isGaelicPrompt ? currentWord.gaelic : currentWord.english;
+                wordPromptEl.textContent = Array.isArray(promptData) ? promptData[0] : promptData;
+                promptLanguageEl.textContent = isGaelicPrompt ? 'Translate to English:' : 'Translate to Irish Gaelic:';
+
+                answerInputEl.value = '';
+                answerInputEl.disabled = false;
+                feedbackEl.textContent = '';
+                showActionButtons();
+                updateStats();
+                answerInputEl.focus();
+            }
+            
+            function showEndOfQuiz() {
+                finalCorrectEl.textContent = correctCount;
+                finalIncorrectEl.textContent = incorrectCount;
+                showView('end');
+            }
+
+            function updateStats() {
+                correctCountEl.textContent = correctCount;
+                incorrectCountEl.textContent = incorrectCount;
+                progressCountEl.textContent = `${currentWordIndex}/${currentQuizList.length}`;
+            }
+            
+            function sanitizeString(input) {
+                if (typeof input !== 'string') return '';
+                return input
+                    .replace(/\s*\(.*?\)\s*/g, ' ')
+                    .replace(/\b\d+\.\d+\b/g, '')
+                    .trim();
+            }
+
+            function checkAnswer(userAnswer) {
+                const sanitizedUserAnswer = sanitizeString(userAnswer).toLowerCase();
+                if (!sanitizedUserAnswer || !currentWord) return false;
+
+                const correctAnswers = isGaelicPrompt ? currentWord.english : currentWord.gaelic;
+
+                if (Array.isArray(correctAnswers)) {
+                    return correctAnswers.some(answer => sanitizeString(answer).toLowerCase() === sanitizedUserAnswer);
+                } else {
+                    return sanitizeString(correctAnswers).toLowerCase() === sanitizedUserAnswer;
+                }
+            }
+            
+            function getCorrectAnswerDisplay() {
+                 const correctAnswers = isGaelicPrompt ? currentWord.english : currentWord.gaelic;
+                 return Array.isArray(correctAnswers) ? correctAnswers.join(' / ') : correctAnswers;
+            }
+
+            // --- Event Listeners ---
+            answerForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (checkAnswer(answerInputEl.value)) {
+                    feedbackEl.textContent = 'Correct!';
+                    feedbackEl.className = 'correct text-center font-medium h-6 mt-4';
+                    correctCount++;
+                } else {
+                    feedbackEl.textContent = `Correct answer: ${getCorrectAnswerDisplay()}`;
+                    feedbackEl.className = 'incorrect text-center font-medium h-6 mt-4';
+                    incorrectCount++;
+                }
+                currentWordIndex++;
+                updateStats();
+                answerInputEl.disabled = true;
+                showNextButton();
+            });
+            
+            showAnswerBtn.addEventListener('click', () => {
+                if (!currentWord) return;
+                feedbackEl.textContent = `Correct answer: ${getCorrectAnswerDisplay()}`;
+                feedbackEl.className = 'info text-center font-medium h-6 mt-4';
+                incorrectCount++; // "I'm Stuck" counts as incorrect
+                currentWordIndex++;
+                updateStats();
+                answerInputEl.disabled = true;
+                showNextButton();
+            });
+
+            nextBtn.addEventListener('click', getNextWord);
+            backToSectionsBtn.addEventListener('click', init);
+            restartBtn.addEventListener('click', init);
+
+            function showActionButtons() {
+                actionButtonsContainer.classList.remove('hidden');
+                nextButtonContainer.classList.add('hidden');
+            }
+
+            function showNextButton() {
+                actionButtonsContainer.classList.add('hidden');
+                nextButtonContainer.classList.remove('hidden');
+            }
+
+            init(); // Start the app
+        });
+    </script>
+</body>
+</html>
